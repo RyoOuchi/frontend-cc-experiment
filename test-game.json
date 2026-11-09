@@ -1,0 +1,19 @@
+{
+  "gameCode": "B08002",
+  "gameId": "90e3752b-01c6-44fc-ab4d-5f4f80e6a66f",
+  "playerUrl": "http://localhost:5173/?game=B08002",
+  "hostUrl": "http://localhost:5173/admin",
+  "prompts": [
+    "時計",
+    "ペットボトル",
+    "椅子",
+    "本"
+  ],
+  "instructions": [
+    "Open playerUrl and enter any unique nickname to join.",
+    "Use the open host tab showing B08002 to start and advance the game.",
+    "Keep that host tab open: its admin session is stored per tab.",
+    "The room persists across server restarts. Joining closes when the host starts the game.",
+    "Photo judgments are manual in the local demo."
+  ]
+}
