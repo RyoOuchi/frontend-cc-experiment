@@ -58,7 +58,9 @@ export function createColorHuntRouter({ dataDir, now = Date.now } = {}) {
     fail("ゲームが見つかりません。コードを確認してください。", 404);
   const current = (game) => game.rounds[game.currentRound - 1];
   const unresolved = (game, round) =>
-    game.submissions.some(
+    (now() < (round.uploadDeadlineAt ?? round.endAt) && [...uploads.values()].some(
+      (t) => t.roundId === round.roundId && !game.submissions.some((s) => s.submissionId === t.submissionId),
+    )) || game.submissions.some(
       (s) =>
         s.roundId === round.roundId && ["PENDING", "ERROR"].includes(s.status),
     );
@@ -183,6 +185,7 @@ export function createColorHuntRouter({ dataDir, now = Date.now } = {}) {
             ...(visiblePrompt ? { promptText: round.promptText } : {}),
             startAt: round.startAt,
             endAt: round.endAt,
+            uploadDeadlineAt: round.uploadDeadlineAt ?? round.endAt,
           }
         : null,
       submissions: game.submissions
@@ -237,8 +240,17 @@ export function createColorHuntRouter({ dataDir, now = Date.now } = {}) {
     const round = current(game);
     round.startAt = now() + 3000;
     round.endAt = round.startAt + 15000;
+    round.uploadDeadlineAt = round.endAt + 4000;
     game.status = "COUNTDOWN";
     bump(game);
+  }
+  function checkUploadWindow(game, round) {
+    advance(game);
+    required(
+      ["ACTIVE", "JUDGING"].includes(game.status) && current(game) === round &&
+        now() >= round.startAt && now() < (round.uploadDeadlineAt ?? round.endAt),
+      "写真のアップロード受付時間が終了しました。", 409,
+    );
   }
   router.use((_req, res, next) => {
     res.set("Cache-Control", "no-store");
@@ -451,7 +463,7 @@ export function createColorHuntRouter({ dataDir, now = Date.now } = {}) {
   router.post("/rounds/:roundId/upload-url", (req, res) => {
     const { game, round } = findRound(req.params.roundId);
     const actor = identity(req, game, "PLAYER");
-    checkActive(game, round);
+    checkUploadWindow(game, round);
     required(
       !game.submissions.some(
         (s) => s.roundId === round.roundId && s.playerId === actor.playerId,
@@ -479,7 +491,14 @@ export function createColorHuntRouter({ dataDir, now = Date.now } = {}) {
         t.playerId === actor.playerId &&
         t.key === idempotencyKey,
     );
-    if (!ticket) {
+    if (ticket) {
+      required(ticket.size === size && ticket.contentType === contentType,
+        "同じ送信IDには同じ写真情報を指定してください。", 409);
+    } else {
+      checkActive(game, round);
+      for (const [id, previous] of uploads) {
+        if (previous.roundId === round.roundId && previous.playerId === actor.playerId) uploads.delete(id);
+      }
       const submissionId = randomUUID();
       ticket = {
         submissionId,
@@ -492,12 +511,16 @@ export function createColorHuntRouter({ dataDir, now = Date.now } = {}) {
         size,
         key: idempotencyKey,
         endAt: round.endAt,
+        startedAt: now(),
+        uploadDeadlineAt: round.uploadDeadlineAt ?? round.endAt,
       };
       uploads.set(submissionId, ticket);
     }
     res.json({
       submissionId: ticket.submissionId,
       imageKey: ticket.imageKey,
+      startedAt: ticket.startedAt,
+      uploadDeadlineAt: ticket.uploadDeadlineAt,
       uploadUrl: `${req.protocol}://${req.get("host")}${req.baseUrl}/uploads/${ticket.submissionId}?ticket=${ticket.token}`,
       headers: { "Content-Type": contentType },
     });
@@ -513,7 +536,7 @@ export function createColorHuntRouter({ dataDir, now = Date.now } = {}) {
         403,
       );
       const { game, round } = findRound(ticket.roundId);
-      checkActive(game, round);
+      checkUploadWindow(game, round);
       required(
         !game.submissions.some((s) => s.submissionId === ticket.submissionId),
         "写真はすでに受け付けられています。",
@@ -561,7 +584,7 @@ export function createColorHuntRouter({ dataDir, now = Date.now } = {}) {
       );
       return res.json(snapshot(req, game, actor));
     }
-    checkActive(game, round);
+    checkUploadWindow(game, round);
     const ticket = uploads.get(submissionId);
     required(
       ticket?.uploaded &&
@@ -571,7 +594,7 @@ export function createColorHuntRouter({ dataDir, now = Date.now } = {}) {
         ticket.key === idempotencyKey,
       "写真のアップロードを確認できませんでした。",
     );
-    const submittedAt = now();
+    const submittedAt = ticket.startedAt;
     game.submissions.push({
       submissionId,
       roundId: round.roundId,

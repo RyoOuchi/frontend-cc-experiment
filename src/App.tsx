@@ -22,7 +22,9 @@ export default function App() {
   const isJoinScreen = !admin && !state.session;
   const capturing =
     !admin &&
-    state.game?.status === "ACTIVE" &&
+    (state.game?.status === "ACTIVE" ||
+      (state.game?.status === "JUDGING" && state.game.round &&
+        state.now < (state.game.round.uploadDeadlineAt ?? state.game.round.endAt))) &&
     Boolean(state.game.round) &&
     !state.game.submissions.some(
       (submission) =>

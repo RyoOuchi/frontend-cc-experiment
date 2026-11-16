@@ -37,6 +37,7 @@ export default function PlayerGame({
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const [preparing, setPreparing] = useState(false);
+  const [sendAttempt, setSendAttempt] = useState<{ roundId: string; at: number } | null>(null);
   const round = game.round;
   const submission = game.submissions.find(
     (s) => s.playerId === session.playerId && s.roundId === round?.roundId,
@@ -44,6 +45,11 @@ export default function PlayerGame({
   const seconds = round
     ? Math.max(0, Math.ceil((round.endAt - now) / 1000))
     : 15;
+  const sentAt = submission?.submittedAt ?? (sendAttempt?.roundId === round?.roundId ? sendAttempt?.at : undefined);
+  const displaySeconds = round && sentAt !== undefined
+    ? Math.max(0, Math.ceil((round.endAt - sentAt) / 1000))
+    : seconds;
+  const uploadExpired = !round || now >= (round.uploadDeadlineAt ?? round.endAt);
   async function prepareCamera() {
     setCameraError("");
     setPreparing(true);
@@ -169,11 +175,11 @@ export default function PlayerGame({
               <span className="eyebrow">
                 ROUND {game.currentRound} <span>/ {game.totalRounds}</span>
               </span>
-              <span className={`timer ${seconds <= 5 ? "urgent" : ""}`}>
+              <span className={`timer ${displaySeconds <= 5 ? "urgent" : ""}`}>
                 <Clock3 size={18} />
                 <b>
-                  {game.status === "ACTIVE"
-                    ? String(seconds).padStart(2, "0")
+                  {game.status === "ACTIVE" || sentAt !== undefined
+                    ? String(displaySeconds).padStart(2, "0")
                     : "00"}
                 </b>
                 <small>秒</small>
@@ -186,16 +192,20 @@ export default function PlayerGame({
             <div className="time-track">
               <span
                 style={{
-                  width: `${game.status === "ACTIVE" ? (seconds / 15) * 100 : 0}%`,
+                  width: `${game.status === "ACTIVE" || sentAt !== undefined ? (displaySeconds / 15) * 100 : 0}%`,
                 }}
               />
             </div>
-            {game.status === "ACTIVE" && !submission && round ? (
+            {(game.status === "ACTIVE" || (game.status === "JUDGING" && !uploadExpired)) && !submission && round ? (
               <PhotoFlow
                 key={round.roundId}
                 session={session}
                 roundId={round.roundId}
                 remaining={seconds}
+                displayRemaining={displaySeconds}
+                uploadExpired={uploadExpired}
+                now={now}
+                onSendStarted={(at) => setSendAttempt(at === null ? null : { roundId: round.roundId, at })}
                 onUpdate={onUpdate}
               />
             ) : (
@@ -268,7 +278,7 @@ export default function PlayerGame({
                 {submission && (
                   <div className="submission-time">
                     <Clock3 size={14} />
-                    サーバー受付：{(submission.elapsedMs / 1000).toFixed(3)} 秒
+                    送信開始：{(submission.elapsedMs / 1000).toFixed(3)} 秒
                   </div>
                 )}
                 {game.status === "RESULTS" ? (

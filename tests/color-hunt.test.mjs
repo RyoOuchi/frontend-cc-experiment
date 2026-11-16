@@ -240,7 +240,43 @@ test("one submission per round, idempotent retry after deadline, private moderat
   });
 });
 
-test("deadline is exclusive at 15000ms and upload time affects acceptance", async (t) => {
+test("uploads started before 15 seconds finish during grace and retain send-start ranking", async (t) => {
+  const f = await fixture(t);
+  const { admin, players } = await f.setup();
+  const { round } = await f.command(admin, "/start");
+  assert.equal(round.endAt - round.startAt, 15000);
+  assert.equal(round.uploadDeadlineAt - round.startAt, 19000);
+  f.time(round.startAt + 14000);
+  const ticketBody = { contentType: "image/png", size: png.length, idempotencyKey: "slow-photo" };
+  const ticket = await f.call(`/rounds/${round.roundId}/upload-url`, {
+    method: "POST", token: players[0].token, body: ticketBody,
+  });
+  const fast = await f.submit(players[1], round, 14500);
+  f.time(round.endAt);
+  await f.judge(admin, fast.ticket.submissionId);
+  assert.equal((await f.state(admin)).status, "JUDGING");
+  await f.call(`/rounds/${round.roundId}/upload-url`, {
+    method: "POST", token: players[2].token, body: { ...ticketBody, idempotencyKey: "late-attempt" }, status: 409,
+  });
+  f.time(round.startAt + 18000);
+  const replay = await f.call(`/rounds/${round.roundId}/upload-url`, {
+    method: "POST", token: players[0].token, body: ticketBody,
+  });
+  assert.equal(replay.submissionId, ticket.submissionId);
+  assert.equal(replay.startedAt, round.startAt + 14000);
+  assert.equal((await fetch(ticket.uploadUrl, { method: "PUT", body: png, headers: ticket.headers })).status, 204);
+  const received = await f.call(`/rounds/${round.roundId}/submissions`, {
+    method: "POST", token: players[0].token, status: 201,
+    body: { submissionId: ticket.submissionId, imageKey: ticket.imageKey, idempotencyKey: "slow-photo" },
+  });
+  assert.equal(received.submissions.find(s => s.submissionId === ticket.submissionId).elapsedMs, 14000);
+  const result = await f.judge(admin, ticket.submissionId);
+  assert.equal(result.status, "RESULTS");
+  assert.equal(result.submissions.find(s => s.submissionId === ticket.submissionId).rank, 1);
+  assert.equal(result.submissions.find(s => s.submissionId === fast.ticket.submissionId).rank, 2);
+});
+
+test("upload confirmation deadline is exclusive at 19000ms", async (t) => {
   const f = await fixture(t);
   const { admin, players } = await f.setup();
   const { round } = await f.command(admin, "/start");
@@ -265,7 +301,7 @@ test("deadline is exclusive at 15000ms and upload time affects acceptance", asyn
     ).status,
     204,
   );
-  f.time(round.endAt);
+  f.time(round.uploadDeadlineAt);
   await f.call(`/rounds/${round.roundId}/submissions`, {
     method: "POST",
     token: players[1].token,

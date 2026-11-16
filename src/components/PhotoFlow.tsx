@@ -14,11 +14,19 @@ export default function PhotoFlow({
   session,
   roundId,
   remaining,
+  displayRemaining,
+  uploadExpired,
+  now,
+  onSendStarted,
   onUpdate,
 }: {
   session: Session;
   roundId: string;
   remaining: number;
+  displayRemaining: number;
+  uploadExpired: boolean;
+  now: number;
+  onSendStarted: (time: number | null) => void;
   onUpdate: (game: Game) => void;
 }) {
   const video = useRef<HTMLVideoElement>(null);
@@ -29,6 +37,7 @@ export default function PhotoFlow({
   const controller = useRef<AbortController | null>(null);
   const ticket = useRef<UploadTicket | null>(null);
   const key = useRef(crypto.randomUUID());
+  const attemptStarted = useRef<number | null>(null);
   const [photo, setPhoto] = useState<Blob | null>(null);
   const [preview, setPreview] = useState("");
   const [ready, setReady] = useState(false);
@@ -37,12 +46,14 @@ export default function PhotoFlow({
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState("");
   const expired = remaining <= 0;
+  const deadlinePassed = useRef(expired);
+  deadlinePassed.current = expired;
   const stop = () => {
     stream.current?.getTracks().forEach((track) => track.stop());
     stream.current = null;
   };
   async function startCamera() {
-    if (requesting) return;
+    if (requesting || deadlinePassed.current) return;
     setError("");
     setRequesting(true);
     try {
@@ -59,7 +70,7 @@ export default function PhotoFlow({
         },
         audio: false,
       });
-      if (!mounted.current) {
+      if (!mounted.current || deadlinePassed.current) {
         media.getTracks().forEach((track) => track.stop());
         return;
       }
@@ -84,7 +95,7 @@ export default function PhotoFlow({
   }
   useEffect(() => {
     mounted.current = true;
-    void startCamera();
+    if (!expired) void startCamera();
     return () => {
       mounted.current = false;
       stop();
@@ -106,9 +117,11 @@ export default function PhotoFlow({
   useEffect(() => {
     if (expired) {
       stop();
-      controller.current?.abort();
     }
   }, [expired]);
+  useEffect(() => {
+    if (uploadExpired) controller.current?.abort();
+  }, [uploadExpired]);
   async function capture() {
     if (!video.current?.videoWidth || expired || inFlight.current) return;
     const canvas = document.createElement("canvas");
@@ -136,19 +149,26 @@ export default function PhotoFlow({
     }
   }
   async function submit() {
-    if (!photo || expired || inFlight.current) return;
+    if (!photo || uploadExpired || (expired && attemptStarted.current === null) || inFlight.current) return;
     inFlight.current = true;
+    if (attemptStarted.current === null) {
+      attemptStarted.current = now;
+      onSendStarted(now);
+    }
+    stop();
     setBusy(true);
     setError("");
     controller.current = new AbortController();
     try {
-      setStep("写真をアップロード中…");
+      setStep("送信を受け付け中…");
       ticket.current ||= await api.uploadTicket(
         session,
         roundId,
         photo,
         key.current,
+        controller.current.signal,
       );
+      setStep("写真をアップロード中…");
       await api.upload(ticket.current, photo, controller.current.signal);
       setStep("送信を確認中…");
       const game = await api.confirmPhoto(
@@ -156,6 +176,7 @@ export default function PhotoFlow({
         roundId,
         ticket.current,
         key.current,
+        controller.current.signal,
       );
       if (mounted.current) onUpdate(game);
     } catch (e) {
@@ -235,27 +256,32 @@ export default function PhotoFlow({
                   この写真を送信しますか？
                 </h2>
               </div>
-              {!expired && (
-                <span className="photo-review-time">残り {remaining} 秒</span>
+              {(!expired || attemptStarted.current !== null) && (
+                <span className="photo-review-time">{attemptStarted.current !== null ? "送信時 残り" : "残り"} {displayRemaining} 秒</span>
               )}
             </div>
             <img className="photo-review-thumbnail" src={preview} alt="撮影した写真" />
             <p id="photo-review-status" className="photo-review-status" aria-live="polite">
-              {expired
-                ? "受付時間が終了しました。写真は送信されていません。"
+              {uploadExpired || (expired && attemptStarted.current === null)
+                ? "受付時間が終了しました。結果をお待ちください。"
                 : busy
                   ? step
-                  : "まだ送信されていません。写真を確認してください。"}
+                  : attemptStarted.current !== null
+                    ? "送信を完了できませんでした。同じ写真を再送信できます。"
+                    : "まだ送信されていません。写真を確認してください。"}
             </p>
-            {!expired && (
+            {!uploadExpired && (!expired || attemptStarted.current !== null) && (
               <div className="capture-actions">
                 <button
                   className="button secondary"
-                  disabled={busy}
+                  disabled={busy || expired}
                   onClick={() => {
                     setPhoto(null);
                     ticket.current = null;
+                    attemptStarted.current = null;
+                    onSendStarted(null);
                     setError("");
+                    void startCamera();
                   }}
                 >
                   <RotateCcw size={18} />
@@ -267,7 +293,7 @@ export default function PhotoFlow({
                   ) : (
                     <Send size={18} />
                   )}
-                  {busy ? "送信中…" : "この写真を送信する"}
+                  {busy ? "送信中…" : attemptStarted.current !== null ? "写真を再送信" : "この写真を送信する"}
                 </button>
               </div>
             )}

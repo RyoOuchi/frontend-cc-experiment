@@ -118,9 +118,9 @@ The worker first calls `DetectModerationLabels` on the accepted photo version. A
 ## Image submission
 
 1. Capture a JPEG in-browser with `getUserMedia`; compress its longest edge to at most 1280px at quality 0.78. Maximum 2MB. No library selection.
-2. Request `uploadUrl` using a stable idempotency key for this capture. The server binds the ticket to the player, round, MIME type and image key.
+2. Pressing Send freezes the player's displayed timer and requests `uploadUrl` using a stable idempotency key for this capture. New tickets are accepted only before `endAt` (15 seconds). The server records `startedAt` and binds the ticket to the player, round, MIME type, size and image key. Replaying the same ticket preserves its original time.
 3. `PUT` the Blob to the returned `uploadUrl`, using returned `headers`. **Do not send the API bearer token to S3.**
-4. Call `submitPhoto` with the same ticket and idempotency key. Only this confirmation's server receipt time determines order. Validate `0 <= submittedAt - startAt < 15000`.
+4. Call `submitPhoto` with the same ticket and idempotency key. Upload and confirmation may finish during the four-second grace window, strictly before `uploadDeadlineAt` (19 seconds). For a valid ticket, `submittedAt` and `elapsedMs` use the ticket's server-recorded `startedAt`, so image upload time does not affect rank. The initial ticket request's network delay still counts. Client-provided click timestamps are not trusted.
 5. Return a `Game` containing the accepted `PENDING` submission. Later events/state reads provide the judgment. A lost response is recovered by fetching state; retries must not create a second submission.
 
 ```ts
@@ -129,6 +129,8 @@ interface UploadTicket {
   imageKey: string;
   uploadUrl: string;
   headers?: Record<string, string>;
+  startedAt?: number;
+  uploadDeadlineAt?: number;
 }
 ```
 
@@ -144,16 +146,16 @@ Send a JSON event with `type` (or `event`) from this list:
 
 The frontend treats events as invalidations and fetches an authorized snapshot. WebSocket reconnection uses exponential backoff up to 30 seconds and always resynchronizes on connect. HTTP polling continues once per second with or without WebSockets. State requests advance the round deadlines using server timestamps, so no background scheduler is required. Focus/online events also refresh state. Messages for other games and already-applied revisions are ignored. Ping/PONG heartbeats detect silent disconnections. Older revisions cannot overwrite newer snapshots. This snapshot approach favors a simple replaceable contract; load-test and consider scoped event payloads before large production events.
 
-Timers use `serverTime` adjusted for half the HTTP round-trip delay. Time expiry disables capture/submission, but only the backend advances the game state and accepts/rejects photos.
+Timers use `serverTime` adjusted for half the HTTP round-trip delay. The round exposes `endAt` and optional `uploadDeadlineAt`; old rounds without the latter retain their original deadline. At 15 seconds, capture, retakes and new sends stop. An existing send may continue/retry until 19 seconds, at which point the browser aborts unfinished uploads. The component stays mounted during the grace window. Only the backend advances state and accepts/rejects photos.
 
 ## Scoring and transitions
 
 `DRAFT → LOBBY → COUNTDOWN → ACTIVE → JUDGING → RESULTS`, then host-controlled next round or `FINISHED` after the final round.
 
-- Countdown: 3 seconds. Active submission window: 15 seconds.
-- Correct submissions rank by server confirmation time; judging completion order is irrelevant.
+- Countdown: 3 seconds. New-send window: 15 seconds. Upload completion deadline: 19 seconds.
+- Correct submissions rank by the first accepted upload-ticket request for that photo; upload speed and judging completion order do not affect rank.
 - Rank points: 100 / 80 / 60 / 40 / 20 (rank 5+).
 - Equal timestamps have equal ranks; competition ranks skip places (1, 1, 3).
-- `PENDING` and `ERROR` prevent result finalization. System failure is never silently treated as incorrect.
+- Pending upload tickets prevent result finalization until confirmed or expired at 19 seconds. An unconfirmed upload receives no points. Accepted submissions in `PENDING` or `ERROR` continue to prevent finalization while judging is unresolved.
 - Judgment changes require a reason, are audited server-side, and recompute round and total scores without additive duplication.
 - Final ties share a rank; the podium groups everyone at ranks 1, 2 and 3, and the list shows every player.

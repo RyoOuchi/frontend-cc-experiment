@@ -483,7 +483,9 @@ export default function AdminGame({
             {game.status === "JUDGING" && (
               <p className="notice">
                 <LoaderCircle size={16} className="spin" />
-                {failed
+                {pending === 0 && round && now < (round.uploadDeadlineAt ?? round.endAt)
+                  ? "送信中の写真を受け付けています…"
+                  : failed
                   ? `${failed}枚で判定エラーが発生しました。「判定の詳細」から再実行できます。`
                   : game.reviewMode === "automatic"
                     ? `AIが${pending}枚の写真を確認しています。判定が終わると自動で得点が確定します。`

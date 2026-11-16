@@ -25,6 +25,7 @@ export interface Round {
   promptText?: string;
   startAt: number;
   endAt: number;
+  uploadDeadlineAt?: number;
 }
 export interface Player {
   playerId: string;
@@ -82,4 +83,6 @@ export interface UploadTicket {
   imageKey: string;
   uploadUrl: string;
   headers?: Record<string, string>;
+  startedAt?: number;
+  uploadDeadlineAt?: number;
 }

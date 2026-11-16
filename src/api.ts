@@ -133,12 +133,13 @@ export const api = {
     roundId: string,
     file: Blob,
     idempotencyKey: string,
+    signal?: AbortSignal,
   ) =>
     request<UploadTicket>(endpoints.uploadUrl(roundId), session.token, {
       contentType: file.type,
       size: file.size,
       idempotencyKey,
-    }),
+    }, signal),
   upload: async (ticket: UploadTicket, file: Blob, signal: AbortSignal) => {
     // Never send the player's bearer token to S3.
     const response = await fetch(ticket.uploadUrl, {
@@ -157,12 +158,13 @@ export const api = {
     roundId: string,
     ticket: UploadTicket,
     idempotencyKey: string,
+    signal?: AbortSignal,
   ) =>
     request<Game>(endpoints.submitPhoto(roundId), session.token, {
       submissionId: ticket.submissionId,
       imageKey: ticket.imageKey,
       idempotencyKey,
-    }),
+    }, signal),
 };
 const sessionKey = (role: Session["role"]) =>
   `color-hunt-${role.toLowerCase()}-v1${connection.mode === "demo" ? "" : `:${connection.apiBaseUrl}`}`;

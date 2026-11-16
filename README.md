@@ -16,7 +16,7 @@ Open **http://localhost:5173/** for players and **http://localhost:5173/admin** 
 1. On `/admin`, create a game and enter prompts, accepted English labels, and confidence thresholds. Four blank rows are provided; use the sample button for a quick start. Add, remove, or reorder up to 30 prompts.
 2. Save the prompts to open the lobby. Share the six-character code.
 3. Players enter the code and a unique display name (1–20 characters). Prepare camera permissions before the round.
-4. Start the game. All clients derive the 3-second countdown and 15-second timer from server timestamps. Future prompts are omitted from player responses.
+4. Start the game. All clients derive the 3-second countdown and 15-second timer from server timestamps. Send freezes the player's timer; uploads already started can finish by 19 seconds. Ranking uses the server's send-start time, not upload completion time. Future prompts are omitted from player responses.
 5. Players capture, preview, retake, and submit one compressed photo. There is no photo-library picker. The host reviews submissions and records the judgment and reason.
 6. Results wait for every accepted submission to be judged. The host can correct judgments, start the next round, and show the final podium.
 
