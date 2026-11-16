@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   Camera,
   CameraOff,
-  Check,
   LoaderCircle,
   RotateCcw,
   Send,
@@ -23,6 +22,7 @@ export default function PhotoFlow({
   onUpdate: (game: Game) => void;
 }) {
   const video = useRef<HTMLVideoElement>(null);
+  const reviewHeading = useRef<HTMLHeadingElement>(null);
   const stream = useRef<MediaStream | null>(null);
   const mounted = useRef(true);
   const inFlight = useRef(false);
@@ -101,6 +101,9 @@ export default function PhotoFlow({
     return () => URL.revokeObjectURL(url);
   }, [photo]);
   useEffect(() => {
+    if (preview) reviewHeading.current?.focus();
+  }, [preview]);
+  useEffect(() => {
     if (expired) {
       stop();
       controller.current?.abort();
@@ -176,8 +179,8 @@ export default function PhotoFlow({
     }
   }
   return (
-    <div className="capture-flow">
-      <div className={`camera-view ${preview ? "has-photo" : ""}`}>
+    <div className={`capture-flow ${preview ? "review-mode" : ""}`}>
+      <div className={`camera-view ${preview ? "hidden" : ""}`}>
         <video
           ref={video}
           playsInline
@@ -186,7 +189,6 @@ export default function PhotoFlow({
           className={preview ? "hidden" : ""}
           aria-label="カメラのライブプレビュー"
         />
-        {preview && <img src={preview} alt="撮影した写真のプレビュー" />}
         {!ready && !preview && (
           <div className="camera-placeholder">
             <CameraOff size={38} />
@@ -207,14 +209,9 @@ export default function PhotoFlow({
             <span className="viewfinder bottom-left" />
             <span className="viewfinder bottom-right" />
             <span className="camera-caption">
-              お題のものを、フレームの中に。
+              1 / 2　まず写真を撮影します
             </span>
           </>
-        )}
-        {preview && (
-          <span className="preview-label">
-            <Check size={14} /> プレビュー
-          </span>
         )}
       </div>
       {error && (
@@ -222,32 +219,63 @@ export default function PhotoFlow({
           {error}
         </p>
       )}
-      {expired ? (
+      {preview ? (
+        <div className="photo-review-screen">
+          <section
+            className="photo-review-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="photo-review-title"
+            aria-describedby="photo-review-status"
+          >
+            <div className="photo-review-heading">
+              <div>
+                <span className="photo-review-step">2 / 2　写真を確認</span>
+                <h2 id="photo-review-title" ref={reviewHeading} tabIndex={-1}>
+                  この写真を送信しますか？
+                </h2>
+              </div>
+              {!expired && (
+                <span className="photo-review-time">残り {remaining} 秒</span>
+              )}
+            </div>
+            <img className="photo-review-thumbnail" src={preview} alt="撮影した写真" />
+            <p id="photo-review-status" className="photo-review-status" aria-live="polite">
+              {expired
+                ? "受付時間が終了しました。写真は送信されていません。"
+                : busy
+                  ? step
+                  : "まだ送信されていません。写真を確認してください。"}
+            </p>
+            {!expired && (
+              <div className="capture-actions">
+                <button
+                  className="button secondary"
+                  disabled={busy}
+                  onClick={() => {
+                    setPhoto(null);
+                    ticket.current = null;
+                    setError("");
+                  }}
+                >
+                  <RotateCcw size={18} />
+                  撮り直す
+                </button>
+                <button className="button primary" disabled={busy} onClick={submit}>
+                  {busy ? (
+                    <LoaderCircle className="spin" size={19} />
+                  ) : (
+                    <Send size={18} />
+                  )}
+                  {busy ? "送信中…" : "この写真を送信する"}
+                </button>
+              </div>
+            )}
+          </section>
+        </div>
+      ) : expired ? (
         <div className="notice">
           受付時間が終了しました。結果をお待ちください。
-        </div>
-      ) : preview ? (
-        <div className="capture-actions">
-          <button
-            className="button secondary"
-            disabled={busy}
-            onClick={() => {
-              setPhoto(null);
-              ticket.current = null;
-              setError("");
-            }}
-          >
-            <RotateCcw size={18} />
-            撮り直す
-          </button>
-          <button className="button primary" disabled={busy} onClick={submit}>
-            {busy ? (
-              <LoaderCircle className="spin" size={19} />
-            ) : (
-              <Send size={18} />
-            )}
-            {busy ? step : "写真を送る"}
-          </button>
         </div>
       ) : (
         <button
@@ -256,7 +284,7 @@ export default function PhotoFlow({
           onClick={capture}
         >
           <Camera size={20} />
-          写真をとる
+          1 / 2　写真を撮る
         </button>
       )}
       <p className="privacy-note">
