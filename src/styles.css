@@ -1561,11 +1561,56 @@ textarea {
   border-bottom-right-radius: 8px;
 }
 .photo-review-panel {
-  margin-top: 12px;
+  display: none;
+}
+.photo-review-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
   padding: 14px;
+  overflow: hidden;
+  background: #101827;
+}
+.photo-review-backdrop {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #101827;
+}
+.photo-review-backdrop img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.photo-review-screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #1018278c;
+}
+.photo-review-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 400px);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px;
   border: 1px solid #dfe6f5;
-  border-radius: 12px;
-  background: #f5f8ff;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 16px 48px #0005;
+}
+.photo-review-thumbnail {
+  display: block;
+  width: 100%;
+  height: clamp(130px, 28vh, 220px);
+  margin-top: 12px;
+  border-radius: 10px;
+  background: #101827;
+  object-fit: contain;
 }
 .photo-review-heading {
   display: flex;
@@ -3658,9 +3703,13 @@ textarea {
     aspect-ratio: auto;
   }
   .capture-mode .photo-review-panel {
-    flex: 0 0 auto;
-    margin-top: 8px;
-    padding: 10px;
+    display: none;
+  }
+  .capture-mode .photo-review-dialog {
+    padding: 12px;
+  }
+  .capture-mode .photo-review-thumbnail {
+    height: clamp(110px, 24vh, 190px);
   }
   .capture-mode .photo-review-heading h2 {
     font-size: 14px;
@@ -3668,6 +3717,9 @@ textarea {
   .capture-mode .photo-review-status {
     font-size: 10px;
     margin-top: 3px;
+  }
+  .capture-mode .review-mode {
+    position: relative;
   }
   .capture-mode .capture-flow > .button,
   .capture-mode .capture-actions {
