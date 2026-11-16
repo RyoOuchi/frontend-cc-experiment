@@ -20,6 +20,15 @@ export default function App() {
   const admin = location.pathname.replace(/\/$/, "") === "/admin";
   const state = useGame(admin ? "ADMIN" : "PLAYER");
   const isJoinScreen = !admin && !state.session;
+  const capturing =
+    !admin &&
+    state.game?.status === "ACTIVE" &&
+    Boolean(state.game.round) &&
+    !state.game.submissions.some(
+      (submission) =>
+        submission.roundId === state.game?.round?.roundId &&
+        submission.playerId === state.session?.playerId,
+    );
   const [busy, setBusy] = useState(false);
   const [hostLoginOpen, setHostLoginOpen] = useState(false);
   const [hostCode, setHostCode] = useState("");
@@ -64,7 +73,9 @@ export default function App() {
     }
   }
   return (
-    <div className={`app ${admin && state.game ? "host-app" : ""}`}>
+    <div
+      className={`app ${admin && state.game ? "host-app" : ""} ${capturing ? "capture-mode" : ""}`}
+    >
       <a className="skip-link" href="#main-content">
         メインコンテンツへ
       </a>
