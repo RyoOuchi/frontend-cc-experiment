@@ -1,6 +1,8 @@
 import { connection, endpoints, integrationEndpoints } from "./endpoints";
+import { parseLabelSuggestion } from "./labelSuggestions";
 import type {
   Game,
+  LabelSuggestion,
   Prompt,
   Session,
   SessionResponse,
@@ -83,6 +85,13 @@ export const api = {
       undefined,
       signal,
     ),
+  suggestLabels: (session: Session, promptText: string, signal?: AbortSignal) =>
+    request<LabelSuggestion>(
+      endpoints.suggestLabels(session.gameId),
+      session.token,
+      { promptText },
+      signal,
+    ).then(parseLabelSuggestion),
   savePrompts: (session: Session, prompts: Prompt[]) =>
     request<Game>(endpoints.savePrompts(session.gameId), session.token, {
       prompts,

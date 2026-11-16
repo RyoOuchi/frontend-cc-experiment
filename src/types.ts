@@ -13,6 +13,12 @@ export interface Prompt {
   acceptedLabels: string[];
   minConfidence: number;
 }
+/** POST /labels/suggest の応答。matched=false は「該当なし」。 */
+export interface LabelSuggestion {
+  labels: string[];
+  matched: boolean;
+  reason?: string;
+}
 export interface Round {
   roundId: string;
   roundNumber: number;
@@ -37,9 +43,15 @@ export interface Submission {
   elapsedMs: number;
   status: Judgment;
   moderationStatus: "PENDING" | "SAFE" | "BLOCKED";
+  moderationMethod?: string;
+  moderationReason?: string;
   earnedScore: number | null;
   rank: number | null;
   detectedLabels: { name: string; confidence: number }[];
+  judgeMethod?: string;
+  judgeReason?: string;
+  judgeConfidence?: number | null;
+  judgedAt?: number;
 }
 export interface Game {
   gameId: string;

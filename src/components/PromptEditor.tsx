@@ -1,13 +1,19 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowRight,
   ArrowUp,
   Lightbulb,
   Plus,
+  Sparkles,
   Trash2,
 } from "lucide-react";
-import type { Prompt } from "../types";
+import type { LabelSuggestion, Prompt } from "../types";
+
+/** 行ごとの「候補を取得」の状態。none は該当なし(matched=false)。 */
+type Suggest =
+  | { state: "loading" }
+  | { state: "done" | "none" | "error"; message: string };
 
 type Draft = {
   roundId: string;
@@ -22,7 +28,7 @@ const empty = (): Draft => ({
   minConfidence: 85,
 });
 const examples = [
-  ["時計", "Clock, Watch"],
+  ["時計", "Clock, Wristwatch"],
   ["ペットボトル", "Water Bottle"],
   ["椅子", "Chair"],
   ["本", "Book"],
@@ -30,10 +36,13 @@ const examples = [
 export default function PromptEditor({
   initial,
   onSave,
+  onSuggest,
   busy,
 }: {
   initial?: Prompt[];
   onSave: (prompts: Prompt[]) => Promise<void>;
+  /** 日本語のお題 → 英語ラベル候補。渡さなければ従来どおり手入力のみ。 */
+  onSuggest?: (promptText: string, signal?: AbortSignal) => Promise<LabelSuggestion>;
   busy: boolean;
 }) {
   const [drafts, setDrafts] = useState<Draft[]>(() =>
@@ -42,10 +51,85 @@ export default function PromptEditor({
       : Array.from({ length: 4 }, empty),
   );
   const [error, setError] = useState("");
+  const [suggests, setSuggests] = useState<Record<string, Suggest>>({});
+  // 行ごとの最新リクエスト番号。お題を直したあとに古い応答が届いても反映しない。
+  const latest = useRef<Record<string, number>>({});
+  const requests = useRef<Record<string, AbortController>>({});
+  useEffect(() => () => {
+    for (const [id, request] of Object.entries(requests.current)) {
+      latest.current[id] = (latest.current[id] ?? 0) + 1;
+      request.abort();
+    }
+  }, []);
+  const suggesting = Object.values(suggests).some((s) => s.state === "loading");
   function update(index: number, patch: Partial<Draft>) {
     setDrafts((rows) =>
       rows.map((r, i) => (i === index ? { ...r, ...patch } : r)),
     );
+  }
+  function forgetSuggest(roundId: string) {
+    requests.current[roundId]?.abort();
+    delete requests.current[roundId];
+    latest.current[roundId] = (latest.current[roundId] ?? 0) + 1;
+    setSuggests(({ [roundId]: _gone, ...rest }) => rest);
+  }
+  async function suggest(roundId: string, promptText: string) {
+    if (!onSuggest) return;
+    const text = promptText.trim();
+    if (!text) {
+      setSuggests((s) => ({
+        ...s,
+        [roundId]: { state: "error", message: "先にお題を入力してください。" },
+      }));
+      return;
+    }
+    const ticket = (latest.current[roundId] ?? 0) + 1;
+    latest.current[roundId] = ticket;
+    const controller = new AbortController();
+    requests.current[roundId]?.abort();
+    requests.current[roundId] = controller;
+    setSuggests((s) => ({ ...s, [roundId]: { state: "loading" } }));
+    const result = await Promise.resolve().then(() => onSuggest(text, controller.signal)).then(
+      (value) => ({ value }) as const,
+      (e: unknown) => ({ e }) as const,
+    );
+    if (latest.current[roundId] !== ticket) return;
+    delete requests.current[roundId];
+    if ("e" in result) {
+      setSuggests((s) => ({
+        ...s,
+        [roundId]: {
+          state: "error",
+          message:
+            (result.e instanceof Error ? result.e.message : "") ||
+            "候補を取得できませんでした。ラベルは手入力できます。",
+        },
+      }));
+      return;
+    }
+    const { labels, matched, reason } = result.value;
+    if (matched && labels.length) {
+      setDrafts((rows) =>
+        rows.map((r) =>
+          r.roundId === roundId ? { ...r, labels: labels.join(", ") } : r,
+        ),
+      );
+      setSuggests((s) => ({
+        ...s,
+        [roundId]: {
+          state: "done",
+          message: reason ? `候補を入力しました(${reason})` : "候補を入力しました",
+        },
+      }));
+    } else {
+      setSuggests((s) => ({
+        ...s,
+        [roundId]: {
+          state: "none",
+          message: "該当なし" + (reason ? `(${reason})` : ""),
+        },
+      }));
+    }
   }
   function move(index: number, by: number) {
     setDrafts((rows) => {
@@ -55,6 +139,7 @@ export default function PromptEditor({
     });
   }
   async function save() {
+    if (busy || suggesting) return;
     const prompts = drafts.map((p) => ({
       roundId: p.roundId,
       promptText: p.promptText.trim(),
@@ -103,15 +188,16 @@ export default function PromptEditor({
         <button
           className="text-button"
           disabled={busy}
-          onClick={() =>
+          onClick={() => {
+            drafts.forEach((draft) => forgetSuggest(draft.roundId));
             setDrafts(
               examples.map(([promptText, labels]) => ({
                 ...empty(),
                 promptText,
                 labels,
               })),
-            )
-          }
+            );
+          }}
         >
           サンプルを使う <ArrowRight size={15} />
         </button>
@@ -130,9 +216,10 @@ export default function PromptEditor({
                     value={prompt.promptText}
                     maxLength={60}
                     placeholder={`例：${examples[index % 4][0]}`}
-                    onChange={(e) =>
-                      update(index, { promptText: e.target.value })
-                    }
+                    onChange={(e) => {
+                      update(index, { promptText: e.target.value });
+                      forgetSuggest(prompt.roundId);
+                    }}
                     disabled={busy}
                   />
                 </label>
@@ -142,7 +229,10 @@ export default function PromptEditor({
                     value={prompt.labels}
                     maxLength={600}
                     placeholder={examples[index % 4][1]}
-                    onChange={(e) => update(index, { labels: e.target.value })}
+                    onChange={(e) => {
+                      update(index, { labels: e.target.value });
+                      forgetSuggest(prompt.roundId);
+                    }}
                     disabled={busy}
                   />
                 </label>
@@ -169,6 +259,36 @@ export default function PromptEditor({
                 <span>% 以上</span>
                 <small>正解ラベルのいずれかと一致した場合に正解</small>
               </div>
+              {onSuggest && (
+                <div className="suggest-row">
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => suggest(prompt.roundId, prompt.promptText)}
+                    disabled={
+                      busy ||
+                      !prompt.promptText.trim() ||
+                      suggests[prompt.roundId]?.state === "loading"
+                    }
+                  >
+                    <Sparkles size={14} />
+                    {suggests[prompt.roundId]?.state === "loading"
+                      ? "候補を探しています…"
+                      : "お題から英語ラベルの候補を取得"}
+                  </button>
+                  {(() => {
+                    const s = suggests[prompt.roundId];
+                    return s && s.state !== "loading" ? (
+                      <span
+                        className={`suggest-status ${s.state}`}
+                        role={s.state === "error" ? "alert" : "status"}
+                      >
+                        {s.message}
+                      </span>
+                    ) : null;
+                  })()}
+                </div>
+              )}
             </div>
             <div className="prompt-row-actions">
               <button
@@ -190,7 +310,10 @@ export default function PromptEditor({
               <button
                 className="icon-button delete-button"
                 aria-label={`お題${index + 1}を削除`}
-                onClick={() => setDrafts(drafts.filter((_, i) => i !== index))}
+                onClick={() => {
+                  forgetSuggest(prompt.roundId);
+                  setDrafts((rows) => rows.filter((row) => row.roundId !== prompt.roundId));
+                }}
                 disabled={busy || drafts.length === 1}
               >
                 <Trash2 size={16} />
@@ -216,7 +339,7 @@ export default function PromptEditor({
         <span>
           <strong>{drafts.length}</strong> お題 · 各15秒
         </span>
-        <button className="button primary" onClick={save} disabled={busy}>
+        <button className="button primary" onClick={save} disabled={busy || suggesting}>
           {busy ? "保存しています…" : "お題を決定して、ロビーへ"}
           <ArrowRight size={18} />
         </button>

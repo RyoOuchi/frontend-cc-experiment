@@ -54,7 +54,12 @@ export default function AdminGame({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
-  const [review, setReview] = useState<Submission | null>(null);
+  const [selectedReview, setReview] = useState<Submission | null>(null);
+  const [manualCorrection, setManualCorrection] = useState(false);
+  // Keep an open details dialog current when the automatic result arrives.
+  const review = selectedReview
+    ? game.submissions.find((s) => s.submissionId === selectedReview.submissionId) || selectedReview
+    : null;
   const [reason, setReason] = useState("");
   const [decision, setDecision] = useState<"CORRECT" | "INCORRECT">("CORRECT");
   const [safe, setSafe] = useState(true);
@@ -74,6 +79,7 @@ export default function AdminGame({
   const pending = game.submissions.filter(
     (s) => s.status === "PENDING" || s.status === "ERROR",
   ).length;
+  const failed = game.submissions.filter((s) => s.status === "ERROR").length;
   const submissions = [...game.submissions].sort(
     (a, b) => a.submittedAt - b.submittedAt,
   );
@@ -91,6 +97,7 @@ export default function AdminGame({
   }
   function openReview(submission: Submission) {
     setReview(submission);
+    setManualCorrection(game.reviewMode === "manual");
     setReason("");
     setDecision(submission.status === "INCORRECT" ? "INCORRECT" : "CORRECT");
     setSafe(submission.moderationStatus !== "BLOCKED");
@@ -189,6 +196,7 @@ export default function AdminGame({
           <PromptEditor
             initial={game.prompts}
             busy={busy}
+            onSuggest={(promptText, signal) => api.suggestLabels(session, promptText, signal)}
             onSave={async (prompts) => {
               setBusy(true);
               setError("");
@@ -360,7 +368,7 @@ export default function AdminGame({
                 <p>
                   {game.reviewMode === "manual"
                     ? "写真を開いて、安全性とお題との一致を確認してください。"
-                    : "安全性が確認された写真を、受付順に表示します。"}
+                    : "AIが安全性とお題を自動判定します。確認を通過した写真は自動で表示されます。"}
                 </p>
               </div>
               <span className="badge">
@@ -395,7 +403,11 @@ export default function AdminGame({
                             <span>
                               {submission.moderationStatus === "BLOCKED"
                                 ? "この写真は非公開です"
-                                : "安全性を確認中"}
+                                : submission.status === "ERROR"
+                                  ? "画像の確認に失敗しました"
+                                  : game.reviewMode === "automatic"
+                                    ? "AIが写真を確認中"
+                                    : "ホストの安全性確認待ち"}
                             </span>
                           </div>
                         )}
@@ -409,7 +421,9 @@ export default function AdminGame({
                           ) : (
                             <Clock3 size={13} />
                           )}
-                          {statusLabels[submission.status]}
+                          {submission.status === "PENDING" && game.reviewMode === "automatic"
+                            ? "AIが判定中"
+                            : statusLabels[submission.status]}
                         </span>
                       </div>
                       <div className="submission-body">
@@ -437,10 +451,11 @@ export default function AdminGame({
                           className="button secondary small full"
                           onClick={() => openReview(submission)}
                         >
-                          {submission.status === "PENDING" ||
-                          submission.status === "ERROR"
-                            ? "写真を確認・判定"
-                            : "判定を修正"}
+                          {game.reviewMode === "automatic"
+                            ? "判定の詳細"
+                            : submission.status === "PENDING" || submission.status === "ERROR"
+                              ? "写真を確認・判定"
+                              : "判定を修正"}
                           <ArrowRight size={14} />
                         </button>
                       </div>
@@ -468,8 +483,11 @@ export default function AdminGame({
             {game.status === "JUDGING" && (
               <p className="notice">
                 <LoaderCircle size={16} className="spin" />
-                {pending}
-                枚の判定を待っています。エラーは手動判定または再判定で解決できます。
+                {failed
+                  ? `${failed}枚で判定エラーが発生しました。「判定の詳細」から再実行できます。`
+                  : game.reviewMode === "automatic"
+                    ? `AIが${pending}枚の写真を確認しています。判定が終わると自動で得点が確定します。`
+                    : `${pending}枚の判定を待っています。写真を開いて判定してください。`}
               </p>
             )}
             {game.status === "RESULTS" && (
@@ -513,15 +531,21 @@ export default function AdminGame({
       </main>
       {review && (
         <Modal
-          title="写真の確認・判定"
+          title={game.reviewMode === "automatic" ? "判定の詳細" : "写真の確認・判定"}
           onClose={() => setReview(null)}
           locked={busy}
         >
           <div className="review-dialog">
             <p className="muted small-text">
-              {review.moderationStatus === "PENDING"
-                ? "ホスト専用の確認画面です。安全性を確認するまで写真は一覧に表示されません。"
-                : "変更すると、このラウンドの順位と合計ポイントが再計算されます。"}
+              {game.reviewMode === "automatic"
+                ? review.status === "PENDING"
+                  ? "AIが安全性とお題を確認しています。ホストの操作は不要です。"
+                  : review.status === "ERROR"
+                    ? "AIの確認を完了できませんでした。下のボタンから再実行できます。"
+                    : "判定は完了しています。ホストの確認・保存は不要です。必要な場合のみ手動で修正できます。"
+                : review.moderationStatus === "PENDING"
+                  ? "ホスト専用の確認画面です。安全性を確認するまで写真は一覧に表示されません。"
+                  : "変更すると、このラウンドの順位と合計ポイントが再計算されます。"}
             </p>
             {review.reviewUrl || review.photoUrl ? (
               <img
@@ -547,56 +571,78 @@ export default function AdminGame({
                   .join(" / ")}
               </p>
             )}
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={safe}
-                onChange={(e) => setSafe(e.target.checked)}
-              />
-              写真の安全性を確認し、ゲーム内の表示を許可する
-            </label>
-            <div className="decision-options">
-              <button
-                className={`button ${decision === "CORRECT" && safe ? "selected-correct" : "secondary"}`}
-                aria-pressed={decision === "CORRECT" && safe}
-                onClick={() => setDecision("CORRECT")}
-                disabled={!safe || busy}
-              >
-                <CheckCircle2 size={19} />
-                正解
-              </button>
-              <button
-                className={`button ${decision === "INCORRECT" || !safe ? "selected-incorrect" : "secondary"}`}
-                aria-pressed={decision === "INCORRECT" || !safe}
-                onClick={() => setDecision("INCORRECT")}
-                disabled={busy}
-              >
-                <XCircle size={19} />
-                不正解
-              </button>
-            </div>
-            <label>
-              判定・変更の理由
-              <textarea
-                value={reason}
-                maxLength={300}
-                placeholder="例：お題の本がはっきり写っているため"
-                onChange={(e) => setReason(e.target.value)}
-                disabled={busy}
-              />
-            </label>
-            {modalError && (
-              <p className="notice error" role="alert">
-                {modalError}
-              </p>
+            {review.judgeReason && (
+              <p className="small-text">判定理由：{review.judgeReason}</p>
             )}
-            <button
-              className="button primary full"
-              onClick={judge}
-              disabled={busy}
-            >
-              {busy ? "保存しています…" : "判定を保存"}
-            </button>
+            {review.moderationReason && (
+              <p className="small-text">写真の表示：{review.moderationReason}</p>
+            )}
+            {!manualCorrection && (
+              <button
+                className="button secondary full"
+                onClick={() => {
+                  setDecision(review.status === "INCORRECT" ? "INCORRECT" : "CORRECT");
+                  setSafe(review.moderationStatus !== "BLOCKED");
+                  setManualCorrection(true);
+                }}
+              >
+                判定を手動で修正
+              </button>
+            )}
+            {manualCorrection && (
+              <>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={safe}
+                    onChange={(e) => setSafe(e.target.checked)}
+                  />
+                  写真の安全性を確認し、ゲーム内の表示を許可する
+                </label>
+                <div className="decision-options">
+                  <button
+                    className={`button ${decision === "CORRECT" && safe ? "selected-correct" : "secondary"}`}
+                    aria-pressed={decision === "CORRECT" && safe}
+                    onClick={() => setDecision("CORRECT")}
+                    disabled={!safe || busy}
+                  >
+                    <CheckCircle2 size={19} />
+                    正解
+                  </button>
+                  <button
+                    className={`button ${decision === "INCORRECT" || !safe ? "selected-incorrect" : "secondary"}`}
+                    aria-pressed={decision === "INCORRECT" || !safe}
+                    onClick={() => setDecision("INCORRECT")}
+                    disabled={busy}
+                  >
+                    <XCircle size={19} />
+                    不正解
+                  </button>
+                </div>
+                <label>
+                  判定・変更の理由
+                  <textarea
+                    value={reason}
+                    maxLength={300}
+                    placeholder="例：お題の本がはっきり写っているため"
+                    onChange={(e) => setReason(e.target.value)}
+                    disabled={busy}
+                  />
+                </label>
+                {modalError && (
+                  <p className="notice error" role="alert">
+                    {modalError}
+                  </p>
+                )}
+                <button
+                  className="button primary full"
+                  onClick={judge}
+                  disabled={busy}
+                >
+                  {busy ? "保存しています…" : "判定を保存"}
+                </button>
+              </>
+            )}
             {game.reviewMode === "automatic" && review.status === "ERROR" && (
               <button
                 className="button secondary full"

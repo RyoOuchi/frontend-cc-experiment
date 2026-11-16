@@ -31,7 +31,10 @@ const route = (
  * Both single-prompt CRUD and the frontend's atomic bulk save are supported.
  */
 export const endpoints = {
-  // Administrator routes (10).
+  // Administrator routes (11).
+  /** 日本語のお題から Rekognition の英語ラベル候補を提案する(管理者のみ)。 */
+  suggestLabels: (gameId: string) =>
+    route("POST", `/games/${id(gameId)}/labels/suggest`),
   createGame: () => route("POST", "/games"),
   gameInfo: (gameId: string) => route("GET", `/games/${id(gameId)}`),
   addPrompt: (gameId: string) => route("POST", `/games/${id(gameId)}/rounds`),
@@ -61,7 +64,7 @@ export const endpoints = {
   ranking: (gameId: string) => route("GET", `/games/${id(gameId)}/ranking`),
 };
 
-/** Optional routes: WebSocket tickets and retry compatibility (409 in manual mode). */
+/** WebSocket tickets and failed automatic-judgment retry (409 in manual mode). */
 export const integrationEndpoints = {
   retryJudgment: (submissionId: string) =>
     route("POST", `/submissions/${id(submissionId)}/retry`),

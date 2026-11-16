@@ -1924,6 +1924,33 @@ textarea {
   color: #abb3c0;
   margin-left: 8px;
 }
+.suggest-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 6px;
+}
+.suggest-row .text-button {
+  font-size: 11px;
+  gap: 5px;
+  color: var(--blue);
+  padding: 3px 0;
+}
+.suggest-row .text-button:disabled {
+  color: var(--muted);
+}
+.suggest-status {
+  font-size: 10px;
+  color: var(--muted);
+}
+.suggest-status.none {
+  font-weight: 600;
+  color: #b7791f;
+}
+.suggest-status.error {
+  color: #c53030;
+}
 .prompt-row-actions {
   display: flex;
   align-items: center;

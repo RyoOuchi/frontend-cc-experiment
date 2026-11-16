@@ -271,6 +271,43 @@ export function createColorHuntRouter({ dataDir, now = Date.now } = {}) {
         game: snapshot(req, game, { role: "ADMIN" }),
       });
   });
+  // デモ用のモック。本番では Lambda(suggest/)が Gemini でラベル候補を選ぶ。
+  // 応答の形は同じ: { labels: string[], matched: boolean, reason?: string }
+  const mockSuggestions = {
+    人間: ["Person"],
+    人: ["Person"],
+    時計: ["Clock", "Wristwatch"],
+    ペットボトル: ["Water Bottle", "Bottle"],
+    椅子: ["Chair"],
+    いす: ["Chair"],
+    本: ["Book"],
+    靴: ["Shoe", "Footwear"],
+    くつ: ["Shoe", "Footwear"],
+    ぬいぐるみ: ["Teddy Bear", "Toy"],
+    スマホ: ["Mobile Phone"],
+  };
+  router.post("/games/:gameId/labels/suggest", (req, res) => {
+    const game = games[req.params.gameId];
+    required(game, "ゲームが見つかりません。", 404);
+    identity(req, game, "ADMIN");
+    const { promptText } = req.body || {};
+    required(
+      typeof promptText === "string" && promptText.trim(),
+      "お題を入力してください。",
+    );
+    required(
+      [...promptText.trim()].length <= 60,
+      "お題は60文字以内で入力してください。",
+    );
+    const text = promptText.normalize("NFKC").trim();
+    required([...text].length <= 60, "お題は60文字以内で入力してください。");
+    const labels = Object.hasOwn(mockSuggestions, text) ? mockSuggestions[text] : [];
+    res.json({
+      labels,
+      matched: labels.length > 0,
+      reason: labels.length ? "デモ用の候補" : "デモ用の辞書にありません",
+    });
+  });
   router.post("/games/join", (req, res) => {
     const { gameCode, displayName } = req.body || {};
     required(

@@ -39,7 +39,7 @@ Set `VITE_API_BASE_URL` to the **complete prefix**, for example `https://your-ap
 
 See [`docs/API.md`](docs/API.md) for bodies, responses, authorization, upload confirmation, and event details. This is a frontend implementation and local test service; live AWS infrastructure must implement that contract.
 
-The Python backend in [`../backend/`](../backend/README.md) implements all 16 supplied routes, bulk prompt save, with compatible JSON responses, plus optional WebSocket tickets. It uses manual photo judging; the retry compatibility route returns 409. Both supplied URLs are saved in [`.env.aws.example`](.env.aws.example). Deploy the backend before copying that template to `.env.local`; the template is not loaded automatically, so the local demo remains available. See [`docs/AWS.md`](docs/AWS.md) for connection settings.
+The Python backend in [`../backend/`](../backend/README.md) implements all 16 supplied routes, bulk prompt save, with compatible JSON responses, plus WebSocket tickets. It supports manual judging and optional [automatic Rekognition judging](../backend/RECOGNITION.md); the retry route requeues automatic judgments in `ERROR`. Both supplied URLs are saved in [`.env.aws.example`](.env.aws.example). Deploy the backend before copying that template to `.env.local`; the template is not loaded automatically, so the local demo remains available. See [`docs/AWS.md`](docs/AWS.md) for connection settings.
 
 ## Local demo service
 

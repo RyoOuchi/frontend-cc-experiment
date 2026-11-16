@@ -13,6 +13,7 @@ The Python Lambda implementation in [`../../backend/`](../../backend/README.md) 
 | createGame          | POST   | `/games`                              | none                                       | `{session, game}` (201)      |
 | joinGame            | POST   | `/games/join`                         | `{gameCode, displayName}`                  | `{session, game}` (201)      |
 | gameState           | GET    | `/games/:gameId/state`                | none                                       | `Game`                       |
+| suggestLabels | POST | `/games/:gameId/labels/suggest` | `{promptText}` | `{labels, matched, reason?}` |
 | savePrompts         | POST   | `/games/:gameId/rounds`               | `{prompts: Prompt[]}`                      | `Game`                       |
 | startGame           | POST   | `/games/:gameId/start`                | none                                       | `Game`                       |
 | nextRound           | POST   | `/games/:gameId/rounds/next`          | none                                       | `Game`                       |
@@ -25,7 +26,9 @@ The Python Lambda implementation in [`../../backend/`](../../backend/README.md) 
 
 `savePrompts` is an **atomic replacement of the ordered prompt list**. Both the bundled demo and the Python backend support it; the Python backend also supports single-prompt POST/PATCH/DELETE. Only drafts/lobbies can be edited. IDs returned by the server are authoritative. `gameState` bundles players, current-round submissions, and ranking so separate results/ranking requests are unnecessary for the existing UI.
 
-The local service does not expose a WebSocket ticket endpoint because no local WebSocket URL is configured. Its retry-judgment route explains that manual judging is required; live AWS should requeue a failed judgment and return the updated state.
+`suggestLabels` requires the game’s admin session token. The AWS handler asks Gemini, canonicalizes its answer against the bundled official Rekognition catalog, and returns at most five labels. `matched: false` means no match; existing labels remain editable. Errors use `{error}` with 400 for invalid input, 401/403 for auth, 404 for a missing game, 502 for upstream failures, and 503 for configuration errors. Suggestions never save prompts or change game state. The local demo uses a small dictionary. See [the setup and gap report](../../backend/SUGGEST.md).
+
+The local service does not expose a WebSocket ticket endpoint because no local WebSocket URL is configured. Its retry-judgment route explains that manual judging is required. In the AWS backend, automatic games requeue an `ERROR` judgment with a new request ID and return the updated state. Retry requires the host token; resolved/manual decisions cannot be retried.
 
 All API responses use JSON and `Cache-Control: no-store`. Errors use non-2xx status and `{ "error": "User-facing message" }`. The client recognizes 401/403/404 on state restoration as an invalid session. Other failures trigger retry/offline feedback.
 
@@ -106,7 +109,9 @@ interface Submission {
 }
 ```
 
-Use absolute signed HTTPS photo URLs in a cross-origin live backend. Do not send other players' photos to player clients. `reviewUrl` is exclusively for an authorized moderator's private review dialog; it is never rendered in the shared wall. The submission Lambda records the photo as `PENDING`; it does not judge it. The existing judgment route is a separate operation. The notification Lambda only announces data changes.
+Use absolute signed HTTPS photo URLs in a cross-origin live backend. Do not send other players' photos to player clients. `reviewUrl` is exclusively for an authorized moderator's private review dialog; it is never rendered in the shared wall. The submission Lambda records the photo as `PENDING`; it does not judge it. In automatic games, the notification Lambda publishes a newly committed request to SQS, and `ColorHuntRecognition` stores the result in the same game/round transaction. The existing judgment route supports optional manual corrections, which automatic results cannot overwrite. Optional submission fields `judgeMethod`, `judgeReason`, `judgeConfidence` (number or null), and `judgedAt` (epoch milliseconds) describe the latest decision.
+
+The worker first calls `DetectModerationLabels` on the accepted photo version. Any moderation label at confidence >= 80 makes the submission `BLOCKED` / `INCORRECT`, finishing it at zero points without host approval. Otherwise `DetectLabels` judges the prompt, and `SAFE` plus the judgment are committed together, automatically publishing the host's `photoUrl`. Optional strings `moderationMethod` and `moderationReason` describe this decision; raw moderation labels stay in the database. API failures retry automatically, then become `ERROR` with the photo still private if attempts are exhausted. Label detection alone never grants publication permission. The local demo remains manual.
 
 ## Image submission
 

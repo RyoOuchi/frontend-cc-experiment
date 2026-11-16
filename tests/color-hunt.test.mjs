@@ -420,3 +420,29 @@ test("simultaneous confirmation retries create one submission and reject foreign
   const result = await f.judge(admin, ticket.submissionId);
   assert.equal(result.players[0].totalScore, 100);
 });
+
+test("suggest labels: admin gets candidates, unknown theme is 該当なし", async (t) => {
+  const f = await fixture(t);
+  const { admin, players } = await f.setup(["あおい"], 1);
+  const suggest = (promptText, { token = admin.token, gameId = admin.gameId, status = 200 } = {}) =>
+    f.call(`/games/${gameId}/labels/suggest`, {
+      method: "POST",
+      token,
+      body: { promptText },
+      status,
+    });
+  const hit = await suggest("人間");
+  assert.deepEqual(hit.labels, ["Person"]);
+  assert.equal(hit.matched, true);
+  const miss = await suggest("楽しいもの");
+  assert.deepEqual(miss.labels, []);
+  assert.equal(miss.matched, false);
+  assert.deepEqual((await suggest("__proto__")).labels, []);
+  assert.deepEqual((await suggest("constructor")).labels, []);
+  await suggest("   ", { status: 400 });
+  await suggest("あ".repeat(61), { status: 400 });
+  await suggest("人間", { token: null, status: 401 });
+  await suggest("人間", { token: "wrong-token", status: 401 });
+  await suggest("人間", { token: players[0].token, status: 403 });
+  await suggest("人間", { gameId: "no-such-game", status: 404 });
+});
