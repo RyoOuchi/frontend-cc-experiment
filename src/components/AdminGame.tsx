@@ -8,7 +8,6 @@ import {
   Clock3,
   Flag,
   ImageOff,
-  LayoutGrid,
   ListChecks,
   LoaderCircle,
   Play,
@@ -132,50 +131,6 @@ export default function AdminGame({
   }
   return (
     <div className="admin-layout">
-      <aside className="admin-sidebar">
-        <div className="sidebar-label">HOST WORKSPACE</div>
-        <nav aria-label="ゲームの進行">
-          {[
-            ["お題の設定", ListChecks],
-            ["ゲームロビー", Users],
-            ["ライブゲーム", LayoutGrid],
-            ["最終結果", Trophy],
-          ].map(([label, Icon], index) => {
-            const ItemIcon = Icon as typeof Users;
-            return (
-              <div
-                className={`sidebar-item ${phase === index ? "active" : ""} ${phase > index ? "complete" : ""}`}
-                aria-current={phase === index ? "step" : undefined}
-                key={index}
-              >
-                <ItemIcon size={19} />
-                <span>{String(label)}</span>
-                {phase > index ? (
-                  <Check size={15} />
-                ) : phase === index ? (
-                  <ChevronRight size={15} />
-                ) : (
-                  <span className="sidebar-number">0{index + 1}</span>
-                )}
-              </div>
-            );
-          })}
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="mini-rule">
-            <Clock3 size={18} />
-            <div>
-              <strong>15秒の小さな冒険。</strong>
-              <p>
-                みんなの「見つけた！」を
-                <br />
-                楽しもう。
-              </p>
-            </div>
-          </div>
-          <span className="sidebar-session">SESSION / {game.gameCode}</span>
-        </div>
-      </aside>
       <main className="admin-main">
         <div className="admin-breadcrumb">
           ワークスペース <ChevronRight size={13} />
