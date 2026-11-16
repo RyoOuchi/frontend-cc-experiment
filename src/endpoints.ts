@@ -11,6 +11,7 @@ export const connection = {
   websocketUrl: import.meta.env.VITE_WS_URL || "",
   mode: import.meta.env.VITE_API_BASE_URL ? "live" : "demo",
   requestTimeoutMs: 12_000,
+  suggestTimeoutMs: 24_000,
   pollIntervalMs: 1_000,
   auth: {
     mode: import.meta.env.VITE_ADMIN_AUTH_MODE === "token" ? "token" : "oidc",

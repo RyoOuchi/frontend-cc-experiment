@@ -28,6 +28,8 @@ The Python Lambda implementation in [`../../backend/`](../../backend/README.md) 
 
 `suggestLabels` requires the game’s admin session token. The AWS handler asks Gemini, canonicalizes its answer against the bundled official Rekognition catalog, and returns at most five labels. `matched: false` means no match; existing labels remain editable. Errors use `{error}` with 400 for invalid input, 401/403 for auth, 404 for a missing game, 502 for upstream failures, and 503 for configuration errors. Suggestions never save prompts or change game state. The local demo uses a small dictionary. See [the setup and gap report](../../backend/SUGGEST.md).
 
+Suggestion requests wait up to 24 seconds, allowing the backend's two 10-second Gemini attempts and 0.5-second retry pause. Other API requests keep their 12-second timeout. Editing or leaving the prompt editor still cancels pending suggestions.
+
 The local service does not expose a WebSocket ticket endpoint because no local WebSocket URL is configured. Its retry-judgment route explains that manual judging is required. In the AWS backend, automatic games requeue an `ERROR` judgment with a new request ID and return the updated state. Retry requires the host token; resolved/manual decisions cannot be retried.
 
 All API responses use JSON and `Cache-Control: no-store`. Errors use non-2xx status and `{ "error": "User-facing message" }`. The client recognizes 401/403/404 on state restoration as an invalid session. Other failures trigger retry/offline feedback.

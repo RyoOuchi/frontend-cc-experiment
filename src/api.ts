@@ -27,11 +27,12 @@ async function request<T>(
   token?: string,
   body?: unknown,
   signal?: AbortSignal,
+  timeoutMs: number = connection.requestTimeoutMs,
 ): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(
     () => controller.abort(),
-    connection.requestTimeoutMs,
+    timeoutMs,
   );
   const abort = () => controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
@@ -91,6 +92,7 @@ export const api = {
       session.token,
       { promptText },
       signal,
+      connection.suggestTimeoutMs,
     ).then(parseLabelSuggestion),
   savePrompts: (session: Session, prompts: Prompt[]) =>
     request<Game>(endpoints.savePrompts(session.gameId), session.token, {
