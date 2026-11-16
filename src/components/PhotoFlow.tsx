@@ -180,7 +180,7 @@ export default function PhotoFlow({
   }
   return (
     <div className={`capture-flow ${preview ? "review-mode" : ""}`}>
-      <div className={`camera-view ${preview ? "has-photo" : ""}`}>
+      <div className={`camera-view ${preview ? "hidden" : ""}`}>
         <video
           ref={video}
           playsInline
@@ -189,7 +189,6 @@ export default function PhotoFlow({
           className={preview ? "hidden" : ""}
           aria-label="カメラのライブプレビュー"
         />
-        {preview && <img src={preview} alt="撮影した写真のプレビュー" />}
         {!ready && !preview && (
           <div className="camera-placeholder">
             <CameraOff size={38} />
@@ -222,9 +221,6 @@ export default function PhotoFlow({
       )}
       {preview ? (
         <div className="photo-review-screen">
-          <div className="photo-review-backdrop" aria-hidden="true">
-            <img src={preview} alt="" />
-          </div>
           <section
             className="photo-review-dialog"
             role="dialog"
