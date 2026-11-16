@@ -210,7 +210,7 @@ export default function PhotoFlow({
             <span className="viewfinder bottom-left" />
             <span className="viewfinder bottom-right" />
             <span className="camera-caption">
-              撮影後に写真を確認して送信します
+              1 / 2　まず写真を撮影します
             </span>
           </>
         )}
@@ -221,45 +221,61 @@ export default function PhotoFlow({
         </p>
       )}
       {preview ? (
-        <div className="photo-review-panel" role="group" aria-label="送信前の写真確認">
-          <div className="photo-review-heading">
-            <div>
-              <span className="photo-review-step">2 / 2　送信前の確認</span>
-              <h2 ref={reviewHeading} tabIndex={-1}>この写真を送信しますか？</h2>
-            </div>
-            {!expired && <span className="photo-review-time">残り {remaining} 秒</span>}
+        <div className="photo-review-screen">
+          <div className="photo-review-backdrop" aria-hidden="true">
+            <img src={preview} alt="" />
           </div>
-          <p className="photo-review-status" aria-live="polite">
-            {expired
-              ? "受付時間が終了しました。写真は送信されていません。"
-              : busy
-                ? step
-                : "まだ送信されていません。写真全体を確認してください。"}
-          </p>
-          {!expired && (
-            <div className="capture-actions">
-              <button
-                className="button secondary"
-                disabled={busy}
-                onClick={() => {
-                  setPhoto(null);
-                  ticket.current = null;
-                  setError("");
-                }}
-              >
-                <RotateCcw size={18} />
-                撮り直す
-              </button>
-              <button className="button primary" disabled={busy} onClick={submit}>
-                {busy ? (
-                  <LoaderCircle className="spin" size={19} />
-                ) : (
-                  <Send size={18} />
-                )}
-                {busy ? "送信中…" : "この写真を送信する"}
-              </button>
+          <section
+            className="photo-review-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="photo-review-title"
+            aria-describedby="photo-review-status"
+          >
+            <div className="photo-review-heading">
+              <div>
+                <span className="photo-review-step">2 / 2　写真を確認</span>
+                <h2 id="photo-review-title" ref={reviewHeading} tabIndex={-1}>
+                  この写真を送信しますか？
+                </h2>
+              </div>
+              {!expired && (
+                <span className="photo-review-time">残り {remaining} 秒</span>
+              )}
             </div>
-          )}
+            <img className="photo-review-thumbnail" src={preview} alt="撮影した写真" />
+            <p id="photo-review-status" className="photo-review-status" aria-live="polite">
+              {expired
+                ? "受付時間が終了しました。写真は送信されていません。"
+                : busy
+                  ? step
+                  : "まだ送信されていません。写真を確認してください。"}
+            </p>
+            {!expired && (
+              <div className="capture-actions">
+                <button
+                  className="button secondary"
+                  disabled={busy}
+                  onClick={() => {
+                    setPhoto(null);
+                    ticket.current = null;
+                    setError("");
+                  }}
+                >
+                  <RotateCcw size={18} />
+                  撮り直す
+                </button>
+                <button className="button primary" disabled={busy} onClick={submit}>
+                  {busy ? (
+                    <LoaderCircle className="spin" size={19} />
+                  ) : (
+                    <Send size={18} />
+                  )}
+                  {busy ? "送信中…" : "この写真を送信する"}
+                </button>
+              </div>
+            )}
+          </section>
         </div>
       ) : expired ? (
         <div className="notice">
@@ -272,7 +288,7 @@ export default function PhotoFlow({
           onClick={capture}
         >
           <Camera size={20} />
-          写真をとる
+          1 / 2　写真を撮る
         </button>
       )}
       <p className="privacy-note">
